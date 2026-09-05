@@ -1,0 +1,4 @@
+.env
+*.sqlite
+*.sqlite-journal
+bin/
