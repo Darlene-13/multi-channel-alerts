@@ -25,7 +25,10 @@ const (
 	STATUS_RETRYING   = 2
 	STATUS_FAILED     = 3
 	MAX_RETRIES       = 5
+	STATUS_COMPLETED  = 4
 
+	ATTEMPT_STATUS          = "success"
+	ATTEMPT_FAILURE         = "failure"
 	notificationLogCacheTTL = 200
 )
 
@@ -36,11 +39,13 @@ type NotificationLog struct {
 	JobUid      uuid.UUID `json:"job_uid"`
 	Channel     int       `json:"channel"`
 	Message     string    `json:"message"`
+	Subject     string    `json:"subject"`
 	Destination string    `json:"destination"`
 	Status      int       `json:"status"`
 
 	Severity    int `json:"severity"`
 	RetriesLeft int `json:"retries_left"`
+	Deadline    int `json:"deadline"`
 
 	CompletedAt time.Time `json:"completed_at"`
 	IsCompleted bool      `json:"is_completed"`
@@ -221,4 +226,17 @@ func RetrieveInternalKey() (*ApiKey, error) {
 
 	cacheApiKey(rdbKey, &apiKey)
 	return &apiKey, nil
+}
+
+type NotificationAttempt struct {
+	gorm.Model
+
+	NotificationUid uuid.UUID `json:"notification_uid"`
+	AttemptNumber   int       `json:"attempt-number"`
+	Status          string    `json:"status"`
+	Error           string    `json:"error"`
+}
+
+func (a *NotificationAttempt) create() error {
+	return db.DB.Create(a).Error
 }

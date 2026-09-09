@@ -9,6 +9,19 @@ The system will support:
 - **Webhooks**
 
 
+The main goal of the project is to explore the engineering challenges involved in building a reliable asynchronous notification system, including:
+
+- Asynchronous job processing 
+- Priority and deadline-based scheduling 
+- Worker pools and concurrency 
+- Notification SLAs 
+- Retries and failure handling 
+- Idempotency and duplicate prevention 
+- Provider selection and failover 
+- Notification expiration 
+- Delivery status tracking 
+- Observability and system reliability
+
 The service will accept notification requests through an API, assign each notification a unique identity, persists its state, schedule it based on its delivery deadline and use workers to processs and deliver the notification through the appropriate channel provider
 ### HIGH LEVEL ARCHITECTURE
 
