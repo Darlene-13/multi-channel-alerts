@@ -4,7 +4,8 @@
 This system sends notifications to users across three channels: SMS (via Twilio or Africa's Talking), email, and webhooks (HTTP POST to a target URL). Different message types carry different urgency requirements. An OTP or a 2FA code is useless if it arrives late, while a newsletter can be delayed by hours with no real consequence. The system is designed around that distinction, treating delivery speed as a first-class architectural concern rather than an afterthought.
 
 ## SYSTEM ARCHITECTURE
-![High level system architecture](https://excalidraw.com/#room=9cdd6d7ef4618b79cd24,cNnRmLdaNxl3ej-4xWGAOg)
+
+![High level system architecture](architecture-diagram.png)
 
 
 ### Walkthrough
