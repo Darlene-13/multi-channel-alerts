@@ -51,21 +51,26 @@ type NotificationJob struct {
 }
 
 func (n *NotificationJob) ToDurableLog() *models.NotificationLog {
-	n.Uid = uuid.New()
-	n.LogUid = uuid.New()
 
 	return &models.NotificationLog{
 		Uid:         n.LogUid,
 		JobUid:      n.Uid,
 		Channel:     n.Channel,
 		Destination: n.DestinationInfo.Recepient,
+		Subject:     n.DestinationInfo.Subject,
+		Message:     n.DestinationInfo.Body,
 		Status:      models.STATUS_ENQUEUED,
 		Severity:    n.Severity,
+		Deadline:    int(n.CreatedAt + int64(severityDeadline(n.Severity).Seconds())),
 		InDLQ:       false,
 	}
 }
 
 func (n *NotificationJob) Enqueue() error {
+	n.Uid = uuid.New()
+	n.LogUid = n.Uid
+	n.CreatedAt = time.Now().Unix()
+
 	if err := n.ToDurableLog().Create(); err != nil {
 		return fmt.Errorf("unable to create durable log for job: %w", err)
 	}
@@ -95,6 +100,19 @@ func retryBackoff(retriesLeft int) time.Duration {
 		return retryMaxDelay
 	}
 	return d
+}
+
+func severityDeadline(severity int) time.Duration {
+	switch severity {
+	case SEVERITY_EMERGENCY:
+		return time.Second * 10
+	case SEVERITY_CRITICAL:
+		return time.Second * 1
+	case SEVERITY_HIGH:
+		return time.Second * 5
+	default:
+		return time.Hour * 1
+	}
 }
 
 func handleSendFailure(ctx context.Context, msgID string, sendErr error, n NotificationJob, notifLog *models.NotificationLog, errchan chan<- []error, logchan chan<- string) {
