@@ -103,7 +103,11 @@ func (n *NotificationLog) Delete() error {
 func (n *NotificationLog) Retrieve(useCache bool) error {
 	if useCache {
 		if nJson, err := cache.Read(n.cacheKey()); err == nil {
-			_ = json.Unmarshal([]byte(nJson), n)
+			cached := NotificationLog{}
+			if err := json.Unmarshal([]byte(nJson), &cached); err == nil && cached.ID != 0 {
+				*n = cached
+				return nil
+			}
 		}
 	}
 
