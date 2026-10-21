@@ -88,10 +88,7 @@ func (n *NotificationJob) ScheduleRetry(at time.Time) error {
 }
 
 func retryBackoff(retriesLeft int) time.Duration {
-	attempt := models.MAX_RETRIES - retriesLeft
-	if attempt < 1 {
-		attempt = 1
-	}
+	attempt := max(models.MAX_RETRIES-retriesLeft, 1)
 
 	d := retryBaseDelay << (attempt - 1)
 	if d <= 0 || d > retryMaxDelay {
@@ -187,8 +184,10 @@ func beginProcessing(n NotificationJob, errchan chan<- []error) *models.Notifica
 }
 
 func finishProcessing(ctx context.Context, msgID string, notifLog *models.NotificationLog, errchan chan<- []error) {
+	notifLog.Status = models.STATUS_COMPLETED
 	notifLog.IsCompleted = true
 	notifLog.CompletedAt = time.Now().UTC()
+	notifLog.LastError = ""
 	cache.GetRedisClient().XDel(ctx, messageStream, msgID)
 
 	if err := notifLog.Update(); err != nil {
