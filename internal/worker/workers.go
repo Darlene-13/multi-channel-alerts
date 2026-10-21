@@ -167,20 +167,20 @@ func HandleMessageStream(ctx context.Context, logchan chan<- string, errchan cha
 	}
 }
 
-func beginProcessing(n NotificationJob, errchan chan<- []error) *models.NotificationLog {
+func beginProcessing(n NotificationJob) (*models.NotificationLog, error) {
 	notifLog := &models.NotificationLog{Uid: n.LogUid}
 
 	if err := notifLog.Retrieve(true); err != nil {
-		errchan <- []error{err}
+		return nil, fmt.Errorf("unable to retrieve notification log: %w", err)
 	}
 
 	notifLog.Status = models.STATUS_PROCESSING
 	notifLog.RetriesLeft--
 	if err := notifLog.Update(); err != nil {
-		errchan <- []error{err}
+		return nil, fmt.Errorf("unable to update notification log: %w", err)
 	}
 
-	return notifLog
+	return notifLog, nil
 }
 
 func finishProcessing(ctx context.Context, msgID string, notifLog *models.NotificationLog, errchan chan<- []error) {
@@ -197,7 +197,12 @@ func finishProcessing(ctx context.Context, msgID string, notifLog *models.Notifi
 
 func SmsSendWorker(ctx context.Context, msgID string, errchan chan<- []error, logchan chan<- string, n NotificationJob) {
 	log.Infof("Processing SMS Job: %s", msgID)
-	notifLog := beginProcessing(n, errchan)
+	notifLog, err := beginProcessing(n)
+	if err != nil {
+		errchan <- []error{fmt.Errorf("SMS job %s: %w", msgID, err)}
+		cache.GetRedisClient().XDel(ctx, messageStream, msgID)
+		return
+	}
 
 	smsPayload := sms.SMSPayload{
 		To:      n.DestinationInfo.Recepient,
@@ -220,8 +225,13 @@ func SmsSendWorker(ctx context.Context, msgID string, errchan chan<- []error, lo
 
 func EmailSendWorker(ctx context.Context, msgID string, errchan chan<- []error, logchan chan<- string, n NotificationJob) {
 	log.Infof("Processing Email Job: %s", msgID)
-	notifLog := beginProcessing(n, errchan)
+	notifLog, err := beginProcessing(n)
 
+	if err != nil {
+		errchan <- []error{fmt.Errorf("Email job %s: %w", msgID, err)}
+		cache.GetRedisClient().XDel(ctx, messageStream, msgID)
+		return
+	}
 	email := mailer.Email{
 		Recepients: []string{n.DestinationInfo.Recepient},
 		Subject:    n.DestinationInfo.Subject,
