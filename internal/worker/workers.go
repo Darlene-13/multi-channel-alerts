@@ -127,11 +127,15 @@ func handleSendFailure(ctx context.Context, msgID string, sendErr error, n Notif
 	}
 
 	backoff := retryBackoff(notifLog.RetriesLeft)
-	notifLog.Status = models.STATUS_RETRYING
 	if err := n.ScheduleRetry(time.Now().Add(backoff)); err != nil {
 		errchan <- []error{fmt.Errorf("job %s: failed to schedule retry: %w", msgID, err)}
+		notifLog.Status = models.STATUS_FAILED
+		notifLog.InDLQ = true
+		notifLog.LastError = fmt.Sprintf("failed to schedule retry job %s: %v", msgID, err)
 		return
 	}
+
+	notifLog.Status = models.STATUS_RETRYING
 	logchan <- fmt.Sprintf("Job %s scheduled for retry in %s (%d retries left)", msgID, backoff, notifLog.RetriesLeft)
 }
 
