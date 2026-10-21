@@ -158,7 +158,6 @@ func HandleMessageStream(ctx context.Context, logchan chan<- string, errchan cha
 		for _, msg := range msgs {
 			for _, id := range msg.Messages {
 				lastId = id.ID
-				logchan <- fmt.Sprintf("Received New Job: %s", id.Values)
 
 				rawPayload, ok := id.Values["value"].(string)
 				if !ok {
@@ -168,9 +167,10 @@ func HandleMessageStream(ctx context.Context, logchan chan<- string, errchan cha
 
 				var payload NotificationJob
 				if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
-					errchan <- []error{err}
+					errchan <- []error{fmt.Errorf("job %s: invalid payload: %w", id.ID, err)}
 					continue
 				}
+				logchan <- fmt.Sprintf("Job %s received message %s", id.ID, rawPayload)
 
 				switch payload.Channel {
 				case EMAIL_CHANNEL:
