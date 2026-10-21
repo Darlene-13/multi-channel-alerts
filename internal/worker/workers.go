@@ -68,7 +68,7 @@ func (n *NotificationJob) ToDurableLog() *models.NotificationLog {
 
 func (n *NotificationJob) Enqueue() error {
 	n.Uid = uuid.New()
-	n.LogUid = n.Uid
+	n.LogUid = uuid.New()
 	n.CreatedAt = time.Now().Unix()
 
 	if err := n.ToDurableLog().Create(); err != nil {
@@ -107,9 +107,9 @@ func severityDeadline(severity int) time.Duration {
 	case SEVERITY_EMERGENCY:
 		return time.Second * 10
 	case SEVERITY_CRITICAL:
-		return time.Second * 1
+		return time.Minute * 1
 	case SEVERITY_HIGH:
-		return time.Second * 5
+		return time.Minute * 5
 	default:
 		return time.Hour * 1
 	}
