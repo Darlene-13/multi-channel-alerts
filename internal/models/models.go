@@ -35,7 +35,7 @@ const (
 type NotificationLog struct {
 	gorm.Model
 
-	Uid         uuid.UUID `json:"uid"`
+	Uid         uuid.UUID `json:"uid" gorm:"uniqueIndex"`
 	JobUid      uuid.UUID `json:"job_uid"`
 	Channel     int       `json:"channel"`
 	Message     string    `json:"message"`
@@ -235,12 +235,12 @@ func RetrieveInternalKey() (*ApiKey, error) {
 type NotificationAttempt struct {
 	gorm.Model
 
-	NotificationUid uuid.UUID `json:"notification_uid"`
-	AttemptNumber   int       `json:"attempt-number"`
+	NotificationUid uuid.UUID `json:"notification_uid" gorm:"index"`
+	AttemptNumber   int       `json:"attempt_number"`
 	Status          string    `json:"status"`
 	Error           string    `json:"error"`
 }
 
-func (a *NotificationAttempt) create() error {
+func (a *NotificationAttempt) Create() error {
 	return db.DB.Create(a).Error
 }

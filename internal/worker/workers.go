@@ -131,7 +131,7 @@ func handleSendFailure(ctx context.Context, msgID string, sendErr error, n Notif
 		errchan <- []error{fmt.Errorf("job %s: failed to schedule retry: %w", msgID, err)}
 		notifLog.Status = models.STATUS_FAILED
 		notifLog.InDLQ = true
-		notifLog.LastError = fmt.Sprintf("failed to schedule retry job %s: %v", msgID, err)
+		notifLog.LastError = fmt.Sprintf("send failed: %v; retry scheduling failed: %v", sendErr, err)
 		return
 	}
 
@@ -171,10 +171,11 @@ func HandleMessageStream(ctx context.Context, logchan chan<- string, errchan cha
 
 				var payload NotificationJob
 				if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
-					errchan <- []error{fmt.Errorf("job %s: invalid payload: %w", id.ID, err)}
+					errchan <- []error{fmt.Errorf("job %s: invalid pzayload: %w", id.ID, err)}
 					continue
 				}
-				logchan <- fmt.Sprintf("Job %s received message %s", id.ID, rawPayload)
+				logchan <- fmt.Sprintf("Job %s received: job_uid=%s log_uid=%s channel=%d severity=%d",
+					id.ID, payload.Uid, payload.LogUid, payload.Channel, payload.Severity)
 
 				switch payload.Channel {
 				case EMAIL_CHANNEL:
@@ -232,6 +233,7 @@ func SmsSendWorker(ctx context.Context, msgID string, errchan chan<- []error, lo
 	}
 
 	res, err := smsPayload.Send()
+	recordAttempt(n, notifLog, err, errchan)
 	if err != nil {
 		errchan <- []error{err}
 		handleSendFailure(ctx, msgID, err, n, notifLog, errchan, logchan)
@@ -250,7 +252,7 @@ func EmailSendWorker(ctx context.Context, msgID string, errchan chan<- []error, 
 	notifLog, err := beginProcessing(n)
 
 	if err != nil {
-		errchan <- []error{fmt.Errorf("Email job %s: %w", msgID, err)}
+		errchan <- []error{fmt.Errorf("email job %s: %w", msgID, err)}
 		cache.GetRedisClient().XDel(ctx, messageStream, msgID)
 		return
 	}
@@ -261,7 +263,10 @@ func EmailSendWorker(ctx context.Context, msgID string, errchan chan<- []error, 
 		Mu:         &sync.Mutex{},
 	}
 
-	if err := <-email.SendAsync(ctx); err != nil {
+	// Its = and not := because err already exists from begin processing.
+	err = <-email.SendAsync(ctx)
+	recordAttempt(n, notifLog, err, errchan)
+	if err != nil {
 		errchan <- []error{err}
 		handleSendFailure(ctx, msgID, err, n, notifLog, errchan, logchan)
 		if err := notifLog.Update(); err != nil {
@@ -301,5 +306,22 @@ func HandleRetryQueue(ctx context.Context, logchan chan<- string, errchan chan<-
 				logchan <- fmt.Sprintf("Re-enqueued retry job onto %s", messageStream)
 			}
 		}
+	}
+}
+
+func recordAttempt(n NotificationJob, notifLog *models.NotificationLog, sendErr error, errchan chan<- []error) {
+	attempt := models.NotificationAttempt{
+		NotificationUid: n.LogUid,
+		AttemptNumber:   models.MAX_RETRIES - notifLog.RetriesLeft,
+		Status:          models.ATTEMPT_STATUS,
+	}
+
+	if sendErr != nil {
+		attempt.Status = models.ATTEMPT_FAILURE
+		attempt.Error = sendErr.Error()
+	}
+
+	if err := attempt.Create(); err != nil {
+		errchan <- []error{fmt.Errorf("record attempt for %s: %w", n.LogUid, err)}
 	}
 }
