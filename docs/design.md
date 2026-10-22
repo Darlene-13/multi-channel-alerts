@@ -5,9 +5,9 @@ This system sends notifications to users across three channels: SMS (via Twilio 
 
 ## SYSTEM ARCHITECTURE
 
-![High level system architecture](architecture-diagram.png)
+![High level system architecture](img.png)
 
-
+**Design:** [View Architecture Design](https://excalidraw.com/#room=9cdd6d7ef4618b79cd24,cNnRmLdaNxl3ej-4xWGAOg)
 ### Walkthrough
 1. The client sends a notification request to the Notification API.
 2. The Notification API validates the request, writes an intent record to the Notification DB (Postgres), and publishes the job onto Redis Streams.

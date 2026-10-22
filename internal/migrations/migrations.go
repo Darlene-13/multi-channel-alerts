@@ -13,6 +13,7 @@ func Migrate() {
 	err := db.DB.AutoMigrate(
 		&models.NotificationLog{},
 		&models.ApiKey{},
+		&models.NotificationAttempt{},
 	)
 	if err != nil {
 		log.Errorf("Unable to migrate database: %v", err)

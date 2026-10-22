@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,7 @@ const (
 type NotificationLog struct {
 	gorm.Model
 
-	Uid         uuid.UUID `json:"uid"`
+	Uid         uuid.UUID `json:"uid" gorm:"uniqueIndex"`
 	JobUid      uuid.UUID `json:"job_uid"`
 	Channel     int       `json:"channel"`
 	Message     string    `json:"message"`
@@ -103,7 +104,11 @@ func (n *NotificationLog) Delete() error {
 func (n *NotificationLog) Retrieve(useCache bool) error {
 	if useCache {
 		if nJson, err := cache.Read(n.cacheKey()); err == nil {
-			_ = json.Unmarshal([]byte(nJson), n)
+			cached := NotificationLog{}
+			if err := json.Unmarshal([]byte(nJson), &cached); err == nil && cached.ID != 0 {
+				*n = cached
+				return nil
+			}
 		}
 	}
 
@@ -124,10 +129,10 @@ func (n *NotificationLog) Decache() error {
 
 type ApiKey struct {
 	gorm.Model
-	Name   string    `json:"name" gorm:"uniqueIndex:idx_name"`
-	Uid    uuid.UUID `json:"uuid" gorm:"uniqueIndex:idx_uuid"`
-	Key    string    `json:"key" gorm:"uniqueIndex:idx_key"`
-	Active bool      `json:"active"`
+	Name    string    `json:"name" gorm:"uniqueIndex:idx_name"`
+	Uid     uuid.UUID `json:"uuid" gorm:"uniqueIndex:idx_uuid"`
+	KeyHash string    `json:"-" gorm:"uniqueIndex:idx_key"`
+	Active  bool      `json:"active"`
 }
 
 type ApiKeyRequest struct {
@@ -142,7 +147,10 @@ func (a *ApiKey) BeforeCreate(tx *gorm.DB) error {
 func (a *ApiKey) Create() error {
 	return db.DB.Create(a).Error
 }
-
+func HashKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
 func (a *ApiKey) GenerateToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -150,12 +158,17 @@ func (a *ApiKey) GenerateToken() (string, error) {
 		return "", err
 	}
 
-	a.Key = hex.EncodeToString(buf)
-	return a.Key, nil
+	raw := hex.EncodeToString(buf)
+	a.KeyHash = HashKey(raw)
+	return raw, nil
 }
 
-func (a *ApiKey) Retrieve() error {
-	return db.DB.Where("key = ?", a.Key).First(a).Error
+func (a *ApiKey) RetrieveByKey(raw string) error {
+	return db.DB.Where("key_hash = ?", HashKey(raw)).First(a).Error
+}
+
+func (a *ApiKey) RetrieveByUid(uid string) error {
+	return db.DB.Where("uid = ?", uid).First(a).Error
 }
 
 func (a *ApiKey) Update() error {
@@ -231,12 +244,12 @@ func RetrieveInternalKey() (*ApiKey, error) {
 type NotificationAttempt struct {
 	gorm.Model
 
-	NotificationUid uuid.UUID `json:"notification_uid"`
-	AttemptNumber   int       `json:"attempt-number"`
+	NotificationUid uuid.UUID `json:"notification_uid" gorm:"index"`
+	AttemptNumber   int       `json:"attempt_number"`
 	Status          string    `json:"status"`
 	Error           string    `json:"error"`
 }
 
-func (a *NotificationAttempt) create() error {
+func (a *NotificationAttempt) Create() error {
 	return db.DB.Create(a).Error
 }
