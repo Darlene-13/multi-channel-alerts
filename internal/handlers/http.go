@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/log"
+	"gorm.io/gorm"
 
 	"github.com/Darlene-13/multi-channel-alerts/internal/db"
 	"github.com/Darlene-13/multi-channel-alerts/internal/models"
@@ -34,22 +36,40 @@ func CreateAPIKeyHandler(c fiber.Ctx) error {
 		Name:   payload.Name,
 		Active: true,
 	}
-	if _, err := key.GenerateToken(); err != nil {
-		return errorResponse(c, fiber.StatusInternalServerError, "Internal server error")
+
+	raw, err := key.GenerateToken()
+	if err != nil {
+		return errorResponse(c, fiber.StatusInternalServerError, "Error generating API Key")
 	}
+
 	if err := key.Create(); err != nil {
 		return errorResponse(c, fiber.StatusInternalServerError, "Internal server error")
 	}
 
-	return c.Status(fiber.StatusOK).JSON(key)
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"uuid": key.Uid,
+		"name": key.Name,
+		"key":  raw,
+		"note": "Store this key now. It cannot be shown again.",
+	})
+}
+
+// lookupErrorResponse turns a failed key lookup into 404 when the key does
+// not exist, and 500 for anything else (e.g. the database is down).
+func lookupErrorResponse(c fiber.Ctx, err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errorResponse(c, fiber.StatusNotFound, "API key not found")
+	}
+	log.Error(err)
+	return errorResponse(c, fiber.StatusInternalServerError, "Internal server error")
 }
 
 func RevokeAPIKeyHandler(c fiber.Ctx) error {
-	key := &models.ApiKey{Key: c.Params("key")}
-
-	if err := key.Retrieve(); err != nil {
-		return errorResponse(c, fiber.StatusNotFound, "API key not found")
+	key := &models.ApiKey{}
+	if err := key.RetrieveByUid(c.Params("id")); err != nil {
+		return lookupErrorResponse(c, err)
 	}
+
 	if err := key.Revoke(); err != nil {
 		return errorResponse(c, fiber.StatusInternalServerError, "Internal server error")
 	}
@@ -58,11 +78,11 @@ func RevokeAPIKeyHandler(c fiber.Ctx) error {
 }
 
 func DeleteAPIKeyHandler(c fiber.Ctx) error {
-	key := &models.ApiKey{Key: c.Params("key")}
-
-	if err := key.Retrieve(); err != nil {
-		return errorResponse(c, fiber.StatusNotFound, "API key not found")
+	key := &models.ApiKey{}
+	if err := key.RetrieveByUid(c.Params("id")); err != nil {
+		return lookupErrorResponse(c, err)
 	}
+
 	if err := key.Delete(); err != nil {
 		return errorResponse(c, fiber.StatusInternalServerError, "Internal server error")
 	}
@@ -87,9 +107,8 @@ func APIKeysHandler(c fiber.Ctx) error {
 
 func ViewAPIKeyHandler(c fiber.Ctx) error {
 	var key models.ApiKey
-	if err := db.DB.Where("uid = ?", c.Params("id")).First(&key).Error; err != nil {
-		log.Error(err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+	if err := key.RetrieveByUid(c.Params("id")); err != nil {
+		return lookupErrorResponse(c, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(key)
